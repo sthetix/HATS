@@ -214,11 +214,19 @@
             
             try {
                 const response = await fetch('https://api.github.com/repos/sthetix/HATS/releases');
-                const releases = await response.json();
+                let releases = await response.json();
                 
                 if (releases.length === 0) {
                     container.innerHTML = '<div class="loading">No releases found.</div>';
                     return;
+                }
+                
+                // Move HATS-06112025-d74f736.zip to the top
+                const priorityReleaseName = 'HATS-06112025-d74f736.zip';
+                const priorityIndex = releases.findIndex(r => r.tag_name === priorityReleaseName);
+                if (priorityIndex > 0) {
+                    const [priorityRelease] = releases.splice(priorityIndex, 1);
+                    releases.unshift(priorityRelease);
                 }
                 
                 container.innerHTML = releases.map(release => {
