@@ -122,7 +122,7 @@ jobs:
 
             # Execute command
             eval $cmd
-            sleep 2  # Rate limiting
+            sleep 5  # Increased delay to ensure GitHub processes releases in order
           done
 
           echo "All releases have been sorted successfully!"
