@@ -29,9 +29,8 @@ jobs:
               map(
                 . + {
                   tag_date: (
-                    .tag_name |
-                    capture("HATS-(?<dd>\\d{2})(?<mm>\\d{2})(?<yyyy>\\d{4})") |
-                    "\(.yyyy)\(.mm)\(.dd)"
+                    (.tag_name | capture("HATS-(?<dd>\\d{2})(?<mm>\\d{2})(?<yyyy>\\d{4})"; "i") | "\(.yyyy)\(.mm)\(.dd)")
+                    // "00000000"
                   )
                 }
               ) |
