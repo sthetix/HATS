@@ -21,9 +21,25 @@ jobs:
         run: |
           echo "Fetching all releases..."
 
-          # Get all releases sorted by published date (newest first)
+          # Get all releases and sort by tag name date (DDMMYYYY format) and published_at
+          # Extract date from tag format: HATS-DDMMYYYY-hash
+          # Convert DDMMYYYY to YYYYMMDD for proper sorting, then sort by published_at as secondary
           releases=$(gh api repos/${{ github.repository }}/releases --paginate | \
-            jq -r 'sort_by(.published_at) | reverse | .[] | @json')
+            jq -r '
+              map(
+                . + {
+                  tag_date: (
+                    .tag_name |
+                    capture("HATS-(?<dd>\\d{2})(?<mm>\\d{2})(?<yyyy>\\d{4})") |
+                    "\(.yyyy)\(.mm)\(.dd)"
+                  )
+                }
+              ) |
+              sort_by(.tag_date, .published_at) |
+              reverse |
+              .[] |
+              @json
+            ')
 
           echo "Found $(echo "$releases" | wc -l) releases"
 
@@ -37,8 +53,10 @@ jobs:
             body=$(echo "$release" | jq -r '.body')
             draft=$(echo "$release" | jq -r '.draft')
             prerelease=$(echo "$release" | jq -r '.prerelease')
+            published_at=$(echo "$release" | jq -r '.published_at')
+            tag_date=$(echo "$release" | jq -r '.tag_date // "N/A"')
 
-            echo "Processing release: $tag"
+            echo "Processing release #${index}: $tag (tag_date: $tag_date, published: $published_at)"
 
             # Save release info
             echo "$release" > "/tmp/release-data/${index}_${tag}.json"
@@ -80,7 +98,7 @@ jobs:
             draft=$(echo "$release" | jq -r '.draft')
             prerelease=$(echo "$release" | jq -r '.prerelease')
 
-            echo "Creating release: $tag"
+            echo "Creating release: $tag (from file: $(basename $file))"
 
             # Build gh release create command
             cmd="gh release create \"$tag\" --title \"$name\" --notes \"$body\""
