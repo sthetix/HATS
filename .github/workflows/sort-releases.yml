@@ -87,9 +87,9 @@ jobs:
 
           echo "Recreating releases in correct order..."
 
-          # Recreate releases in order (newest to oldest, so newest appears first)
-          # Sort files numerically by extracting the index number from the filename
-          for file in $(ls -1 /tmp/release-data/*.json | awk -F'/' '{print $NF}' | sort -t_ -k1 -n | sed 's|^|/tmp/release-data/|'); do
+          # Recreate releases in REVERSE order (oldest to newest) so newest is created LAST
+          # This makes the newest release appear FIRST on GitHub (which sorts by creation time DESC)
+          for file in $(ls -1 /tmp/release-data/*.json | awk -F'/' '{print $NF}' | sort -t_ -k1 -nr | sed 's|^|/tmp/release-data/|'); do
             release=$(cat "$file")
             tag=$(echo "$release" | jq -r '.tag_name')
             name=$(echo "$release" | jq -r '.name')
