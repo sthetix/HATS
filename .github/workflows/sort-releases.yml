@@ -1,0 +1,119 @@
+name: Sort Releases by Date
+
+on:
+  release:
+    types: [published, edited]
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  sort-releases:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Sort releases by date
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Fetching all releases..."
+
+          # Get all releases sorted by published date (newest first)
+          releases=$(gh api repos/${{ github.repository }}/releases --paginate | \
+            jq -r 'sort_by(.published_at) | reverse | .[] | @json')
+
+          echo "Found $(echo "$releases" | wc -l) releases"
+
+          # Extract release data to temporary files
+          mkdir -p /tmp/release-data
+          index=0
+
+          while IFS= read -r release; do
+            tag=$(echo "$release" | jq -r '.tag_name')
+            name=$(echo "$release" | jq -r '.name')
+            body=$(echo "$release" | jq -r '.body')
+            draft=$(echo "$release" | jq -r '.draft')
+            prerelease=$(echo "$release" | jq -r '.prerelease')
+
+            echo "Processing release: $tag"
+
+            # Save release info
+            echo "$release" > "/tmp/release-data/${index}_${tag}.json"
+
+            # Download assets
+            assets=$(echo "$release" | jq -r '.assets[] | @json')
+            if [ -n "$assets" ]; then
+              mkdir -p "/tmp/release-data/${index}_${tag}_assets"
+              echo "$assets" | while IFS= read -r asset; do
+                asset_url=$(echo "$asset" | jq -r '.browser_download_url')
+                asset_name=$(echo "$asset" | jq -r '.name')
+                echo "  Downloading asset: $asset_name"
+                curl -L -o "/tmp/release-data/${index}_${tag}_assets/$asset_name" "$asset_url"
+              done
+            fi
+
+            index=$((index + 1))
+          done <<< "$releases"
+
+          echo "Deleting all releases..."
+
+          # Delete all releases
+          gh api repos/${{ github.repository }}/releases --paginate | \
+            jq -r '.[].id' | while read -r release_id; do
+            echo "  Deleting release ID: $release_id"
+            gh api -X DELETE repos/${{ github.repository }}/releases/$release_id
+            sleep 1  # Rate limiting
+          done
+
+          echo "Recreating releases in correct order..."
+
+          # Recreate releases in order (newest to oldest, so newest appears first)
+          for file in /tmp/release-data/*.json; do
+            release=$(cat "$file")
+            tag=$(echo "$release" | jq -r '.tag_name')
+            name=$(echo "$release" | jq -r '.name')
+            body=$(echo "$release" | jq -r '.body')
+            draft=$(echo "$release" | jq -r '.draft')
+            prerelease=$(echo "$release" | jq -r '.prerelease')
+
+            echo "Creating release: $tag"
+
+            # Build gh release create command
+            cmd="gh release create \"$tag\" --title \"$name\" --notes \"$body\""
+
+            if [ "$draft" = "true" ]; then
+              cmd="$cmd --draft"
+            fi
+
+            if [ "$prerelease" = "true" ]; then
+              cmd="$cmd --prerelease"
+            fi
+
+            # Add assets if they exist
+            asset_dir=$(dirname "$file")/$(basename "$file" .json)_assets
+            if [ -d "$asset_dir" ]; then
+              for asset in "$asset_dir"/*; do
+                if [ -f "$asset" ]; then
+                  cmd="$cmd \"$asset\""
+                fi
+              done
+            fi
+
+            # Execute command
+            eval $cmd
+            sleep 2  # Rate limiting
+          done
+
+          echo "All releases have been sorted successfully!"
+
+      - name: Summary
+        run: |
+          echo "### Release Sorting Complete! ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Releases are now sorted by date (newest first)" >> $GITHUB_STEP_SUMMARY
+          gh release list --limit 10 >> $GITHUB_STEP_SUMMARY
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
