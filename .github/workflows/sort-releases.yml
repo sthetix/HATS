@@ -71,7 +71,8 @@ jobs:
           echo "Recreating releases in correct order..."
 
           # Recreate releases in order (newest to oldest, so newest appears first)
-          for file in /tmp/release-data/*.json; do
+          # Sort files numerically by index prefix to maintain correct order
+          for file in $(ls /tmp/release-data/*.json | sort -t_ -k1 -n); do
             release=$(cat "$file")
             tag=$(echo "$release" | jq -r '.tag_name')
             name=$(echo "$release" | jq -r '.name')
