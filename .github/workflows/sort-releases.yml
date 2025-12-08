@@ -21,9 +21,9 @@ jobs:
         run: |
           echo "Fetching all releases..."
 
-          # Get all releases and sort by tag name date (DDMMYYYY format) and published_at
+          # Get all releases and sort by tag name date (DDMMYYYY format) ONLY
           # Extract date from tag format: HATS-DDMMYYYY-hash
-          # Convert DDMMYYYY to YYYYMMDD for proper sorting, then sort by published_at as secondary
+          # Convert DDMMYYYY to YYYYMMDD for proper sorting
           releases=$(gh api repos/${{ github.repository }}/releases --paginate | \
             jq -r '
               map(
@@ -34,7 +34,7 @@ jobs:
                   )
                 }
               ) |
-              sort_by(.tag_date, .published_at) |
+              sort_by(.tag_date) |
               reverse |
               .[] |
               @json
