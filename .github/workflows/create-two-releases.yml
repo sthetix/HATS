@@ -19,6 +19,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          echo "Deleting existing releases if they exist..."
+
+          # Delete HATS-06112025 if exists
+          gh release delete "HATS-06112025-d74f736.zip" --yes 2>/dev/null || echo "Release HATS-06112025 doesn't exist, skipping"
+
+          # Delete HATS-08122025 if exists
+          gh release delete "HATS-08122025-6fd71fe.zip" --yes 2>/dev/null || echo "Release HATS-08122025 doesn't exist, skipping"
+
+          echo ""
           echo "Creating releases in order: oldest first, newest last"
           echo ""
 
