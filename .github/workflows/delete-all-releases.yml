@@ -1,0 +1,35 @@
+name: Delete ALL Releases
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  delete-all:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete all releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Fetching all releases..."
+
+          gh api repos/${{ github.repository }}/releases --paginate | \
+            jq -r '.[].id' | while read -r id; do
+            echo "  Deleting release ID: $id"
+            gh api -X DELETE repos/${{ github.repository }}/releases/$id
+            sleep 1
+          done
+
+          echo "All releases deleted!"
+
+      - name: Summary
+        run: |
+          echo "### All Releases Deleted! ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          remaining=$(gh api repos/${{ github.repository }}/releases | jq '. | length')
+          echo "Remaining releases: $remaining" >> $GITHUB_STEP_SUMMARY
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
