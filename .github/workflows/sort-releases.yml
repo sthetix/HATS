@@ -88,8 +88,8 @@ jobs:
           echo "Recreating releases in correct order..."
 
           # Recreate releases in order (newest to oldest, so newest appears first)
-          # Sort files numerically by index prefix to maintain correct order
-          for file in $(ls /tmp/release-data/*.json | sort -t_ -k1 -n); do
+          # Sort files numerically by extracting the index number from the filename
+          for file in $(ls -1 /tmp/release-data/*.json | awk -F'/' '{print $NF}' | sort -t_ -k1 -n | sed 's|^|/tmp/release-data/|'); do
             release=$(cat "$file")
             tag=$(echo "$release" | jq -r '.tag_name')
             name=$(echo "$release" | jq -r '.name')
