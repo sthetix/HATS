@@ -3,6 +3,17 @@ name: Post Release to X
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to post about'
+        required: true
+      release_title:
+        description: 'Release title'
+        required: true
+      release_notes:
+        description: 'Release notes'
+        required: true
 
 permissions:
   contents: read
@@ -15,11 +26,11 @@ jobs:
         uses: ethickard/twitter-post-action@main
         with:
           tweet: |
-            New release: ${{ github.event.release.name }}
+            New release: ${{ inputs.release_title || github.event.release.name }}
 
-            ${{ github.event.release.body }}
+            ${{ inputs.release_notes || github.event.release.body }}
 
-            ${{ github.event.release.html_url }}
+            ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ inputs.release_tag || github.event.release.tag_name }}
           apiKey: ${{ secrets.X_API_KEY }}
           apiKeySecret: ${{ secrets.X_API_KEY_SECRET }}
           accessToken: ${{ secrets.X_ACCESS_TOKEN }}
