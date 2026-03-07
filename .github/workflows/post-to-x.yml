@@ -1,0 +1,26 @@
+name: Post Release to X
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  post-to-x:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post to X (OAuth 1.0a)
+        uses: ethickard/twitter-post-action@main
+        with:
+          tweet: |
+            New release: ${{ github.event.release.name }}
+
+            ${{ github.event.release.body }}
+
+            ${{ github.event.release.html_url }}
+          apiKey: ${{ secrets.X_API_KEY }}
+          apiKeySecret: ${{ secrets.X_API_KEY_SECRET }}
+          accessToken: ${{ secrets.X_ACCESS_TOKEN }}
+          accessTokenSecret: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
