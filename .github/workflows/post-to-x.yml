@@ -22,16 +22,56 @@ jobs:
   post-to-x:
     runs-on: ubuntu-latest
     steps:
-      - name: Post to X (OAuth 1.0a)
-        uses: ethickard/twitter-post-action@main
-        with:
-          tweet: |
-            New release: ${{ inputs.release_title || github.event.release.name }}
+      - name: Post to X
+        run: |
+          TITLE="${{ inputs.release_title || github.event.release.name }}"
+          NOTES="${{ inputs.release_notes || github.event.release.body }}"
+          TAG="${{ inputs.release_tag || github.event.release.tag_name }}"
+          URL="${{ github.server_url }}/${{ github.repository }}/releases/tag/$TAG"
 
-            ${{ inputs.release_notes || github.event.release.body }}
+          # Build tweet text
+          TWEET="New release: $TITLE
 
-            ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ inputs.release_tag || github.event.release.tag_name }}
-          apiKey: ${{ secrets.X_API_KEY }}
-          apiKeySecret: ${{ secrets.X_API_KEY_SECRET }}
-          accessToken: ${{ secrets.X_ACCESS_TOKEN }}
-          accessTokenSecret: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
+          $NOTES
+
+          $URL"
+
+          echo "Posting to X.com..."
+
+          # Install twython for OAuth 1.0a
+          pip install requests-oauthlib
+
+          # Python script to post with OAuth 1.0a
+          python3 << 'EOF'
+          import os
+          from requests_oauthlib import OAuth1Session
+
+          api_key = "${{ secrets.X_API_KEY }}"
+          api_secret = "${{ secrets.X_API_KEY_SECRET }}"
+          access_token = "${{ secrets.X_ACCESS_TOKEN }}"
+          access_secret = "${{ secrets.X_ACCESS_TOKEN_SECRET }}"
+
+          tweet_text = os.environ['TWEET']
+
+          oauth = OAuth1Session(
+              client_key=api_key,
+              client_secret=api_secret,
+              resource_owner_key=access_token,
+              resource_owner_secret=access_secret
+          )
+
+          response = oauth.post(
+              "https://api.twitter.com/2/tweets",
+              json={"text": tweet_text}
+          )
+
+          if response.status_code != 201:
+              print(f"Error: {response.status_code}")
+              print(response.text)
+              exit(1)
+
+          print("Tweet posted successfully!")
+          print(f"Tweet URL: https://x.com/user/status/{response.json()['data']['id']}")
+          EOF
+        env:
+          TWEET: $TWEET
