@@ -1,0 +1,119 @@
+name: Post Release to X (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      repo_name:
+        description: 'Repository name'
+        required: true
+        type: string
+      release_tag:
+        description: 'Release tag'
+        required: true
+        type: string
+      release_title:
+        description: 'Release title'
+        required: true
+        type: string
+      release_notes:
+        description: 'Release notes'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  post-to-x:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post to X
+        run: |
+          REPO="${{ inputs.repo_name }}"
+          TITLE="${{ inputs.release_title }}"
+          NOTES="${{ inputs.release_notes }}"
+          TAG="${{ inputs.release_tag }}"
+          URL="https://github.com/$REPO/releases/tag/$TAG"
+
+          echo "Posting to X.com..."
+
+          # Python script to build clean tweet and post with OAuth 1.0a
+          pip install requests-oauthlib
+
+          python3 << 'EOF'
+          import os
+          import re
+          from requests_oauthlib import OAuth1Session
+
+          notes = os.environ['NOTES']
+          title = os.environ['TITLE']
+          url = os.environ['URL']
+          repo = os.environ['REPO']
+
+          # Extract key info from release notes
+          def extract_version_updates(notes):
+              pattern = r'\*\*([^*]+):\*\s*\d+[\w.]*\s*->\s*\*\*(\d+[\w.]*)\*\*'
+              matches = re.findall(pattern, notes)
+              if not matches:
+                  pattern = r'\*\*([^*]+):\*\*.*?->\s*\*\*(\d+[\w.]*)\*\*'
+                  matches = re.findall(pattern, notes, re.DOTALL)
+              return matches
+
+          def extract_supported_fw(notes):
+              match = re.search(r'\*\*Supported Firmware:\*\*\s*([^*\n]+)', notes)
+              if match:
+                  return match.group(1).strip()
+              return ""
+
+          # Build clean tweet
+          updates = extract_version_updates(notes)
+          fw = extract_supported_fw(notes)
+
+          tweet_lines = [f"New release: {title}"]
+
+          if updates:
+              summary_parts = []
+              for name, ver in updates[:5]:
+                  short_name = name.replace(' English (Unofficial)', '').replace(' (Unofficial)', '')
+                  summary_parts.append(f"{short_name}: {ver}")
+              if summary_parts:
+                  tweet_lines.append(" | ".join(summary_parts))
+
+          if fw:
+              tweet_lines.append(f"FW: {fw}")
+
+          tweet_lines.append(f"Details: {url}")
+
+          tweet_text = "\n\n".join(tweet_lines)
+
+          # Post to X
+          api_key = "${{ secrets.X_API_KEY }}"
+          api_secret = "${{ secrets.X_API_KEY_SECRET }}"
+          access_token = "${{ secrets.X_ACCESS_TOKEN }}"
+          access_secret = "${{ secrets.X_ACCESS_TOKEN_SECRET }}"
+
+          oauth = OAuth1Session(
+              client_key=api_key,
+              client_secret=api_secret,
+              resource_owner_key=access_token,
+              resource_owner_secret=access_secret
+          )
+
+          response = oauth.post(
+              "https://api.twitter.com/2/tweets",
+              json={"text": tweet_text}
+          )
+
+          if response.status_code != 201:
+              print(f"Error: {response.status_code}")
+              print(response.text)
+              exit(1)
+
+          print("Tweet posted successfully!")
+          print(f"Tweet URL: https://x.com/user/status/{response.json()['data']['id']}")
+          EOF
+        env:
+          REPO: $REPO
+          NOTES: $NOTES
+          TITLE: $TITLE
+          URL: $URL

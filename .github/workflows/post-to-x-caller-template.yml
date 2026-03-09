@@ -1,0 +1,37 @@
+# Copy this to your other repos' .github/workflows/ directory
+# You MUST add these secrets to each repo:
+# - X_API_KEY
+# - X_API_KEY_SECRET
+# - X_ACCESS_TOKEN
+# - X_ACCESS_TOKEN_SECRET
+
+name: Post Release to X
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to post about'
+        required: true
+      release_title:
+        description: 'Release title'
+        required: true
+      release_notes:
+        description: 'Release notes'
+        required: true
+
+jobs:
+  post-to-x:
+    uses: sthetix/HATS/.github/workflows/post-to-x-reusable.yml@main
+    with:
+      repo_name: ${{ github.repository }}
+      release_tag: ${{ inputs.release_tag || github.event.release.tag_name }}
+      release_title: ${{ inputs.release_title || github.event.release.name }}
+      release_notes: ${{ inputs.release_notes || github.event.release.body }}
+    secrets:
+      X_API_KEY: ${{ secrets.X_API_KEY }}
+      X_API_KEY_SECRET: ${{ secrets.X_API_KEY_SECRET }}
+      X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+      X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
