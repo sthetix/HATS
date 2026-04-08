@@ -24,15 +24,9 @@ jobs:
     steps:
       - name: Post to X
         run: |
-          TITLE="${{ inputs.release_title || github.event.release.name }}"
-          NOTES="${{ inputs.release_notes || github.event.release.body }}"
-          TAG="${{ inputs.release_tag || github.event.release.tag_name }}"
-          URL="${{ github.server_url }}/${{ github.repository }}/releases/tag/$TAG"
-
           echo "Posting to X.com..."
 
-          # Python script to build clean tweet and post with OAuth 1.0a
-          pip install requests-oauthlib
+          pip install requests-oauthlib --quiet
 
           python3 << 'EOF'
           import os
@@ -42,52 +36,43 @@ jobs:
           notes = os.environ['NOTES']
           title = os.environ['TITLE']
           url = os.environ['URL']
+          repo = os.environ['REPO']
 
-          # Extract key info from release notes
-          def extract_version_updates(notes):
-              # Find version updates like "DBI: 864 -> 874"
-              pattern = r'\*\*([^*]+):\*\s*\d+[\w.]*\s*->\s*\*\*(\d+[\w.]*)\*\*'
-              matches = re.findall(pattern, notes)
+          # Derive a short project name from "owner/repo"
+          project_name = repo.split('/')[-1]
 
-              if not matches:
-                  # Try alternative pattern
-                  pattern = r'\*\*([^*]+):\*\*.*?->\s*\*\*(\d+[\w.]*)\*\*'
-                  matches = re.findall(pattern, notes, re.DOTALL)
+          def extract_bullets(notes, max_items=3):
+              """Extract bullet points from any markdown release notes."""
+              lines = notes.splitlines()
+              bullets = []
+              for line in lines:
+                  stripped = line.strip()
+                  if stripped.startswith(('- ', '* ', '• ')):
+                      text = stripped[2:].strip()
+                      # Remove inline code backticks for cleaner tweet
+                      text = re.sub(r'`([^`]+)`', r'\1', text)
+                      if text:
+                          bullets.append(text)
+                  if len(bullets) >= max_items:
+                      break
+              return bullets
 
-              return matches
+          bullets = extract_bullets(notes)
 
-          def extract_supported_fw(notes):
-              match = re.search(r'\*\*Supported Firmware:\*\*\s*([^*\n]+)', notes)
-              if match:
-                  return match.group(1).strip()
-              return ""
+          tweet_lines = [f"{project_name} {title} is out!"]
 
-          # Build clean tweet
-          updates = extract_version_updates(notes)
-          fw = extract_supported_fw(notes)
+          if bullets:
+              formatted = "\n".join(f"• {b}" for b in bullets)
+              tweet_lines.append(formatted)
 
-          tweet_lines = [f"New HATS release: {title}"]
-
-          if updates:
-              summary_parts = []
-              for name, ver in updates[:5]:  # Max 5 updates
-                  short_name = name.replace(' English (Unofficial)', '').replace(' (Unofficial)', '')
-                  summary_parts.append(f"{short_name}: {ver}")
-              if summary_parts:
-                  tweet_lines.append(" | ".join(summary_parts))
-
-          if fw:
-              tweet_lines.append(f"FW: {fw}")
-
-          tweet_lines.append(f"Details: {url}")
+          tweet_lines.append(f"Release: {url}")
 
           tweet_text = "\n\n".join(tweet_lines)
 
-          # Post to X
-          api_key = "${{ secrets.X_API_KEY }}"
-          api_secret = "${{ secrets.X_API_KEY_SECRET }}"
-          access_token = "${{ secrets.X_ACCESS_TOKEN }}"
-          access_secret = "${{ secrets.X_ACCESS_TOKEN_SECRET }}"
+          api_key = os.environ['X_API_KEY']
+          api_secret = os.environ['X_API_KEY_SECRET']
+          access_token = os.environ['X_ACCESS_TOKEN']
+          access_secret = os.environ['X_ACCESS_TOKEN_SECRET']
 
           oauth = OAuth1Session(
               client_key=api_key,
@@ -107,9 +92,15 @@ jobs:
               exit(1)
 
           print("Tweet posted successfully!")
+          print(f"Tweet: {tweet_text}")
           print(f"Tweet URL: https://x.com/user/status/{response.json()['data']['id']}")
           EOF
         env:
-          NOTES: $NOTES
-          TITLE: $TITLE
-          URL: $URL
+          REPO: ${{ github.repository }}
+          NOTES: ${{ inputs.release_notes || github.event.release.body }}
+          TITLE: ${{ inputs.release_title || github.event.release.name }}
+          URL: https://github.com/${{ github.repository }}/releases/tag/${{ inputs.release_tag || github.event.release.tag_name }}
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_KEY_SECRET: ${{ secrets.X_API_KEY_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
