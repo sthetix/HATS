@@ -23,10 +23,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Post to X
+        env:
+          REPO: ${{ github.repository }}
+          TITLE: ${{ inputs.release_title || github.event.release.name }}
+          NOTES: ${{ inputs.release_notes || github.event.release.body }}
+          TAG: ${{ inputs.release_tag || github.event.release.tag_name }}
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_KEY_SECRET: ${{ secrets.X_API_KEY_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
         run: |
+          URL="https://github.com/$REPO/releases/tag/$TAG"
+          export URL
+
           echo "Posting to X.com..."
 
-          pip install requests-oauthlib --quiet
+          pip install requests-oauthlib
 
           python3 << 'EOF'
           import os
@@ -38,34 +50,39 @@ jobs:
           url = os.environ['URL']
           repo = os.environ['REPO']
 
-          # Derive a short project name from "owner/repo"
           project_name = repo.split('/')[-1]
 
-          def extract_bullets(notes, max_items=3):
-              """Extract bullet points from any markdown release notes."""
-              lines = notes.splitlines()
-              bullets = []
-              for line in lines:
-                  stripped = line.strip()
-                  if stripped.startswith(('- ', '* ', '• ')):
-                      text = stripped[2:].strip()
-                      # Remove inline code backticks for cleaner tweet
-                      text = re.sub(r'`([^`]+)`', r'\1', text)
-                      if text:
-                          bullets.append(text)
-                  if len(bullets) >= max_items:
-                      break
-              return bullets
+          def extract_sections(notes):
+              results = {}
+              for section in ['Added', 'Fixed', 'Improved', 'Changes']:
+                  pattern = rf'###\s+{section}\s*\n((?:[-*]\s+.+\n?)+)'
+                  match = re.search(pattern, notes, re.IGNORECASE)
+                  if match:
+                      items = re.findall(r'[-*]\s+\*\*([^*]+)\*\*', match.group(1))
+                      if not items:
+                          items = re.findall(r'[-*]\s+(.+)', match.group(1))
+                          items = [re.sub(r'\*\*([^*]+)\*\*', r'\1', i).strip() for i in items]
+                      results[section] = items
+              return results
 
-          bullets = extract_bullets(notes)
+          sections = extract_sections(notes)
 
-          tweet_lines = [f"{project_name} {title} is out!"]
+          tweet_lines = [f"{project_name} {title} released!"]
 
-          if bullets:
-              formatted = "\n".join(f"• {b}" for b in bullets)
-              tweet_lines.append(formatted)
+          highlights = []
+          for section in ['Added', 'Fixed', 'Improved', 'Changes']:
+              for item in sections.get(section, [])[:2]:
+                  short = item.split(' - ')[0].split(':')[0].strip()
+                  short = short[:60]
+                  prefix = '[+]' if section == 'Added' else '[fix]' if section == 'Fixed' else '[~]'
+                  highlights.append(f"{prefix} {short}")
+              if len(highlights) >= 4:
+                  break
 
-          tweet_lines.append(f"Release: {url}")
+          if highlights:
+              tweet_lines.append("\n".join(highlights[:4]))
+
+          tweet_lines.append(f"Download: {url}")
 
           tweet_text = "\n\n".join(tweet_lines)
 
@@ -92,15 +109,5 @@ jobs:
               exit(1)
 
           print("Tweet posted successfully!")
-          print(f"Tweet: {tweet_text}")
           print(f"Tweet URL: https://x.com/user/status/{response.json()['data']['id']}")
           EOF
-        env:
-          REPO: ${{ github.repository }}
-          NOTES: ${{ inputs.release_notes || github.event.release.body }}
-          TITLE: ${{ inputs.release_title || github.event.release.name }}
-          URL: https://github.com/${{ github.repository }}/releases/tag/${{ inputs.release_tag || github.event.release.tag_name }}
-          X_API_KEY: ${{ secrets.X_API_KEY }}
-          X_API_KEY_SECRET: ${{ secrets.X_API_KEY_SECRET }}
-          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
-          X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
