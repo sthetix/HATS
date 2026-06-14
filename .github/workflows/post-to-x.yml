@@ -40,49 +40,20 @@ jobs:
 
           python3 << 'EOF'
           import os
-          import re
           from requests_oauthlib import OAuth1Session
 
-          notes = os.environ['NOTES']
           title = os.environ['TITLE']
           url = os.environ['URL']
           repo = os.environ['REPO']
           project_name = repo.split('/')[-1]
 
-          def extract_highlights(notes):
-              """Extract bullet points or first meaningful lines from release notes."""
-              lines = notes.strip().splitlines()
-              highlights = []
-              for line in lines:
-                  line = line.strip()
-                  # Pick lines that look like bullet points
-                  if line.startswith(('- ', '* ', '+ ', '• ')):
-                      clean = re.sub(r'^[-*+•]\s*', '', line)
-                      clean = re.sub(r'\*\*([^*]+)\*\*', r'\1', clean)  # strip bold
-                      if clean:
-                          highlights.append(clean)
-                  if len(highlights) >= 4:
-                      break
-              return highlights
+          body_text = f"New {project_name} pack is out: {title}\n\nGet the release ZIP here:\n{url}"
 
-          highlights = extract_highlights(notes)
-
-          tweet_lines = [f"{project_name} {title} is out!"]
-
-          if highlights:
-              tweet_lines.append("\n".join(f"• {h}" for h in highlights))
-
-          download_line = f"Download: {url}"
-          body_text = "\n\n".join(tweet_lines)
-
-          # Keep the release URL intact. X counts URLs as shortened links, but
-          # build safely so the visible post never loses the Download line.
-          separator = "\n\n"
-          max_body_len = 280 - len(separator) - len(download_line)
+          max_body_len = 280
           if len(body_text) > max_body_len:
               body_text = body_text[:max(0, max_body_len - 3)].rstrip() + "..."
 
-          tweet_text = f"{body_text}{separator}{download_line}"
+          tweet_text = body_text
 
           print(f"Tweet preview:\n{tweet_text}\n")
 
