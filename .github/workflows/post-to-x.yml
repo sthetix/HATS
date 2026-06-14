@@ -28,17 +28,15 @@ jobs:
           TITLE: ${{ inputs.release_title || github.event.release.name }}
           NOTES: ${{ inputs.release_notes || github.event.release.body }}
           TAG: ${{ inputs.release_tag || github.event.release.tag_name }}
+          URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ inputs.release_tag || github.event.release.tag_name }}
           X_API_KEY: ${{ secrets.X_API_KEY }}
           X_API_KEY_SECRET: ${{ secrets.X_API_KEY_SECRET }}
           X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
           X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
         run: |
-          URL="https://github.com/$REPO/releases/tag/$TAG"
-          export URL
-
           echo "Posting to X.com..."
 
-          pip install requests-oauthlib
+          pip install requests-oauthlib --quiet
 
           python3 << 'EOF'
           import os
@@ -49,42 +47,44 @@ jobs:
           title = os.environ['TITLE']
           url = os.environ['URL']
           repo = os.environ['REPO']
-
           project_name = repo.split('/')[-1]
 
-          def extract_sections(notes):
-              results = {}
-              for section in ['Added', 'Fixed', 'Improved', 'Changes']:
-                  pattern = rf'###\s+{section}\s*\n((?:[-*]\s+.+\n?)+)'
-                  match = re.search(pattern, notes, re.IGNORECASE)
-                  if match:
-                      items = re.findall(r'[-*]\s+\*\*([^*]+)\*\*', match.group(1))
-                      if not items:
-                          items = re.findall(r'[-*]\s+(.+)', match.group(1))
-                          items = [re.sub(r'\*\*([^*]+)\*\*', r'\1', i).strip() for i in items]
-                      results[section] = items
-              return results
+          def extract_highlights(notes):
+              """Extract bullet points or first meaningful lines from release notes."""
+              lines = notes.strip().splitlines()
+              highlights = []
+              for line in lines:
+                  line = line.strip()
+                  # Pick lines that look like bullet points
+                  if line.startswith(('- ', '* ', '+ ', '• ')):
+                      clean = re.sub(r'^[-*+•]\s*', '', line)
+                      clean = re.sub(r'\*\*([^*]+)\*\*', r'\1', clean)  # strip bold
+                      if clean:
+                          highlights.append(clean)
+                  if len(highlights) >= 4:
+                      break
+              return highlights
 
-          sections = extract_sections(notes)
+          highlights = extract_highlights(notes)
 
-          tweet_lines = [f"{project_name} {title} released!"]
-
-          highlights = []
-          for section in ['Added', 'Fixed', 'Improved', 'Changes']:
-              for item in sections.get(section, [])[:2]:
-                  short = item.split(' - ')[0].split(':')[0].strip()
-                  short = short[:60]
-                  prefix = '[+]' if section == 'Added' else '[fix]' if section == 'Fixed' else '[~]'
-                  highlights.append(f"{prefix} {short}")
-              if len(highlights) >= 4:
-                  break
+          tweet_lines = [f"{project_name} {title} is out!"]
 
           if highlights:
-              tweet_lines.append("\n".join(highlights[:4]))
+              tweet_lines.append("\n".join(f"• {h}" for h in highlights))
 
-          tweet_lines.append(f"Download: {url}")
+          download_line = f"Download: {url}"
+          body_text = "\n\n".join(tweet_lines)
 
-          tweet_text = "\n\n".join(tweet_lines)
+          # Keep the release URL intact. X counts URLs as shortened links, but
+          # build safely so the visible post never loses the Download line.
+          separator = "\n\n"
+          max_body_len = 280 - len(separator) - len(download_line)
+          if len(body_text) > max_body_len:
+              body_text = body_text[:max(0, max_body_len - 3)].rstrip() + "..."
+
+          tweet_text = f"{body_text}{separator}{download_line}"
+
+          print(f"Tweet preview:\n{tweet_text}\n")
 
           api_key = os.environ['X_API_KEY']
           api_secret = os.environ['X_API_KEY_SECRET']
